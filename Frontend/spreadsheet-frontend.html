@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Spreadsheet</title>
+    <style>
+        :root {
+            --border-color: #e2e2e2;
+            --header-bg: #f8f9fa;
+            --cell-size: 100px;
+            --row-header-width: 40px;
+            --col-header-height: 30px;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .toolbar {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            background-color: var(--header-bg);
+        }
+
+        .formula-bar {
+            padding: 5px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+        }
+
+        .formula-bar input {
+            flex: 1;
+            margin-left: 10px;
+            padding: 5px;
+        }
+
+        .spreadsheet {
+            position: relative;
+            overflow: auto;
+            height: calc(100vh - 100px);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: var(--row-header-width) repeat(26, var(--cell-size));
+            position: relative;
+        }
+
+        .cell {
+            border: 1px solid var(--border-color);
+            padding: 5px;
+            min-width: var(--cell-size);
+            height: 25px;
+            outline: none;
+            position: relative;
+        }
+
+        .header-cell {
+            background-color: var(--header-bg);
+            font-weight: bold;
+            text-align: center;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .row-header {
+            background-color: var(--header-bg);
+            font-weight: bold;
+            text-align: center;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+
+        .selected {
+            border: 2px solid #1a73e8;
+            z-index: 2;
+        }
+
+        .toolbar button {
+            margin: 0 5px;
+            padding: 5px 10px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .toolbar button:hover {
+            background: var(--header-bg);
+        }
+
+        .toolbar select {
+            margin: 0 5px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button id="bold">B</button>
+        <button id="italic">I</button>
+        <select id="fontSize">
+            <option value="12">12</option>
+            <option value="14">14</option>
+            <option value="16">16</option>
+            <option value="18">18</option>
+        </select>
+        <button id="addRow">Add Row</button>
+        <button id="addColumn">Add Column</button>
+        <button id="save">Save</button>
+        <button id="load">Load</button>
+    </div>
+    <div class="formula-bar">
+        <span id="selectedCell">A1</span>
+        <input type="text" id="formulaInput" placeholder="Enter formula or value">
+    </div>
+    <div class="spreadsheet">
+        <div class="grid" id="grid"></div>
+    </div>
+
+    <script>
+        class Spreadsheet {
+            constructor() {
+                this.data = {};
+                this.selectedCell = null;
+                this.rows = 100;
+                this.cols = 26;
+                this.init();
+                this.setupEventListeners();
+            }
+
+            init() {
+                const grid = document.getElementById('grid');
+                
+                // Create column headers (A, B, C, etc.)
+                grid.appendChild(this.createCell(''));
+                for (let i = 0; i < this.cols; i++) {
+                    const header = this.createCell(String.fromCharCode(65 + i));
+                    header.classList.add('header-cell');
+                    grid.appendChild(header);
+                }
+
+                // Create rows with row headers (1, 2, 3, etc.)
+                for (let row = 1; row <= this.rows; row++) {
+                    const rowHeader = this.createCell(row.toString());
+                    rowHeader.classList.add('row-header');
+                    grid.appendChild(rowHeader);
+
+                    for (let col = 0; col < this.cols; col++) {
+                        const cell = this.createCell('');
+                        cell.dataset.row = row;
+                        cell.dataset.col = col;
+                        cell.contentEditable = true;
+                        grid.appendChild(cell);
+                    }
+                }
+            }
+
+            createCell(content) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.textContent = content;
+                return cell;
+            }
+
+            setupEventListeners() {
+                const grid = document.getElementById('grid');
+                const formulaInput = document.getElementById('formulaInput');
+
+                grid.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('cell') && !e.target.classList.contains('header-cell') && !e.target.classList.contains('row-header')) {
+                        this.selectCell(e.target);
+                    }
+                });
+
+                formulaInput.addEventListener('input', (e) => {
+                    if (this.selectedCell) {
+                        this.updateCellValue(this.selectedCell, e.target.value);
+                    }
+                });
+
+                document.getElementById('bold').addEventListener('click', () => {
+                    if (this.selectedCell) {
+                        this.selectedCell.style.fontWeight = 
+                            this.selectedCell.style.fontWeight === 'bold' ? 'normal' : 'bold';
+                    }
+                });
+
+                document.getElementById('italic').addEventListener('click', () => {
+                    if (this.selectedCell) {
+                        this.selectedCell.style.fontStyle = 
+                            this.selectedCell.style.fontStyle === 'italic' ? 'normal' : 'italic';
+                    }
+                });
+
+                document.getElementById('fontSize').addEventListener('change', (e) => {
+                    if (this.selectedCell) {
+                        this.selectedCell.style.fontSize = `${e.target.value}px`;
+                    }
+                });
+            }
+
+            selectCell(cell) {
+                if (this.selectedCell) {
+                    this.selectedCell.classList.remove('selected');
+                }
+                this.selectedCell = cell;
+                cell.classList.add('selected');
+                
+                const col = String.fromCharCode(65 + parseInt(cell.dataset.col));
+                const row = cell.dataset.row;
+                document.getElementById('selectedCell').textContent = `${col}${row}`;
+                document.getElementById('formulaInput').value = cell.textContent;
+            }
+
+            updateCellValue(cell, value) {
+                if (value.startsWith('=')) {
+                    // Handle formulas
+                    try {
+                        const result = this.evaluateFormula(value.substring(1));
+                        cell.textContent = result;
+                        this.data[`${cell.dataset.col},${cell.dataset.row}`] = {
+                            formula: value,
+                            value: result
+                        };
+                    } catch (e) {
+                        cell.textContent = '#ERROR!';
+                    }
+                } else {
+                    cell.textContent = value;
+                    this.data[`${cell.dataset.col},${cell.dataset.row}`] = {
+                        value: value
+                    };
+                }
+            }
+
+            evaluateFormula(formula) {
+                // Basic formula evaluation
+                const supportedFunctions = {
+                    'SUM': (range) => this.evaluateRange(range, values => 
+                        values.reduce((a, b) => a + (parseFloat(b) || 0), 0)),
+                    'AVERAGE': (range) => {
+                        const values = this.evaluateRange(range, x => x);
+                        const numbers = values.filter(v => !isNaN(parseFloat(v)));
+                        return numbers.reduce((a, b) => a + parseFloat(b), 0) / numbers.length;
+                    },
+                    'MAX': (range) => Math.max(...this.evaluateRange(range, x => parseFloat(x) || -Infinity)),
+                    'MIN': (range) => Math.min(...this.evaluateRange(range, x => parseFloat(x) || Infinity)),
+                    'COUNT': (range) => this.evaluateRange(range, values => 
+                        values.filter(v => !isNaN(parseFloat(v))).length)
+                };
+
+                // Handle basic functions
+                for (const [func, implementation] of Object.entries(supportedFunctions)) {
+                    if (formula.toUpperCase().startsWith(func)) {
+                        const range = formula.substring(func.length + 1, formula.length - 1);
+                        return implementation(range);
+                    }
+                }
+
+                // Handle basic arithmetic
+                return eval(formula);
+            }
+
+            evaluateRange(range, callback) {
+                const [start, end] = range.split(':');
+                const startCol = start.match(/[A-Z]/)[0].charCodeAt(0) - 65;
+                const startRow = parseInt(start.match(/\d+/)[0]);
+                const endCol = end.match(/[A-Z]/)[0].charCodeAt(0) - 65;
+                const endRow = parseInt(end.match(/\d+/)[0]);
+
+                const values = [];
+                for (let row = startRow; row <= endRow; row++) {
+                    for (let col = startCol; col <= endCol; col++) {
+                        const cell = document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+                        values.push(cell.textContent);
+                    }
+                }
+
+                return callback(values);
+            }
+        }
+
+        // Initialize the spreadsheet
+        const spreadsheet = new Spreadsheet();
+    </script>
+</body>
+</html>
